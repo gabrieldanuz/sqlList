@@ -1,8 +1,15 @@
 import { StatusBar } from 'expo-status-bar'
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native'
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from 'react-native'
 import * as SQLite from 'expo-sqlite'
 import Constants from 'expo-constants'
-import React from 'react'
+import React, { Component } from 'react'
 
 const db = SQLite.openDatabase('db.db')
 
@@ -23,8 +30,8 @@ class Items extends React.Component {
     }
 
     return (
-      <View>
-        <Text>{heading}</Text>
+      <View style={styles.sectionContainer}>
+        <Text style={styles.sectionHeading}>{heading}</Text>
         {items.map((id, done, value) => (
           <TouchableOpacity
             key={id}
@@ -53,20 +60,125 @@ class Items extends React.Component {
   }
 }
 
-export default function App() {
-  return (
-    <View style={styles.container}>
-      <Text>Open up App.js to start working on your app!</Text>
-      <StatusBar style="auto" />
-    </View>
-  )
+export default class App extends Component {
+  state = {
+    text: null
+  }
+  componentDidMount() {
+    db.transaction(tx => {
+      tx.executeSql(
+        'create table if not exists items (id integer primary key not null, done int, value text);'
+      )
+    })
+  }
+
+  render() {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.heading}>Coisas para fazer</Text>
+        <View style={styles.flexRow}>
+          <TextInput
+            style={styles.input}
+            onChangeText={text => this.setState({ text })}
+            onSubmitEditing={() => {
+              this.add(this.state.text)
+              this.setState({ text: null })
+            }}
+            placeholder="O que eu tenho que fazer?"
+            value={this.state.text}
+          />
+        </View>
+        <ScrollView style={styles.listArea}>
+          <Items
+            done={false}
+            ref={todo => (this.todo = todo)}
+            onPressItem={id =>
+              db.transaction(
+                tx => {
+                  tx.executeSql('update items set done =1 where id ?', [id])
+                },
+                null,
+                this.update
+              )
+            }
+          />
+
+          <Items
+            done={true}
+            ref={done => (this.done = done)}
+            onPressItem={id =>
+              db.transaction(
+                tx => {
+                  tx.executeSql('delete from items where id = ?', [id])
+                },
+                null,
+                this.update
+              )
+            }
+          />
+        </ScrollView>
+        <StatusBar style="auto" />
+      </View>
+    )
+  }
+
+  add(text) {
+    if (text === null || text === '') {
+      return false
+    }
+
+    db.transaction(
+      tx => {
+        tx.executeSql('insert into items (done, value) values (0,?)', [text])
+        tx.executeSql('select * from items', [], (_, { rows }) =>
+          console.log(JSON.stringify(rows))
+        )
+      },
+      null,
+      this.update
+    )
+  }
+
+  update = () => {
+    this.todo && this.todo.update()
+    this.done && this.done.update()
+  }
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center'
+    paddingTop: Constants.statusBarHeight
+  },
+  heading: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center'
+  },
+  flexRow: {
+    flexDirection: 'row'
+  },
+  input: {
+    borderColor: '#4630eb',
+    borderRadius: 8,
+    borderWidth: 1,
+    flex: 1,
+    height: 48,
+    margin: 16,
+    padding: 8
+  },
+  listArea: {
+    backgroundColor: '#f0f0f0',
+    flex: 1,
+    paddingTop: 16
+  },
+  sectionContainer: {
+    marginBottom: 16,
+    marginHorizontal: 16
+  },
+  sectionHeading: {
+    fontSize: 16,
+    marginBottom: 8
   }
 })
